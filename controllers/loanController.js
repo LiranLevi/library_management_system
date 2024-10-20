@@ -10,77 +10,77 @@ const calculateDueDate = (rating) => {
 };
 
 //Without concurrency
-exports.loanBook = async (req, res) => {
-    try {
-        const { userId, bookId } = req.body;
-
-        // Check if user has 5 active loans
-        const activeLoans = await Loan.countDocuments({ user: userId, returnDate: null });
-        if (activeLoans >= config.maxBooksBorrowedAtaTime) {
-            return res.status(400).json({ message: `Cannot borrow more than ${config.maxBooksBorrowedAtaTime} books` });
-        }
-
-        // Check if the book is available
-        const book = await Book.findById(bookId);
-        if (!book || !book.available) {
-            return res.status(400).json({ message: 'Book not available' });
-        }
-
-        // Loan the book
-        const dueDate = calculateDueDate(book.rating);
-        const loan = new Loan({ user: userId, book: bookId, dueDate });
-        await loan.save();
-
-        // Mark the book as unavailable
-        book.available = false;
-        await book.save();
-
-        res.status(201).json(loan);
-    } catch (err) {
-        res.status(500).json({ message: 'Loan process failed' });
-    }
-};
-
-//With concurrency
 // exports.loanBook = async (req, res) => {
-//     const session = await mongoose.startSession();
-//     session.startTransaction();
-
 //     try {
 //         const { userId, bookId } = req.body;
 
 //         // Check if user has 5 active loans
-//         const activeLoans = await Loan.countDocuments({ user: userId, returnDate: null }).session(session);
+//         const activeLoans = await Loan.countDocuments({ user: userId, returnDate: null });
 //         if (activeLoans >= config.maxBooksBorrowedAtaTime) {
-//             await session.abortTransaction();
 //             return res.status(400).json({ message: `Cannot borrow more than ${config.maxBooksBorrowedAtaTime} books` });
 //         }
 
 //         // Check if the book is available
-//         const book = await Book.findById(bookId).session(session);
+//         const book = await Book.findById(bookId);
 //         if (!book || !book.available) {
-//             await session.abortTransaction();
 //             return res.status(400).json({ message: 'Book not available' });
 //         }
 
 //         // Loan the book
 //         const dueDate = calculateDueDate(book.rating);
 //         const loan = new Loan({ user: userId, book: bookId, dueDate });
-//         await loan.save({ session });
+//         await loan.save();
 
 //         // Mark the book as unavailable
 //         book.available = false;
-//         await book.save({ session });
+//         await book.save();
 
-//         await session.commitTransaction();
-//         session.endSession();
 //         res.status(201).json(loan);
 //     } catch (err) {
-//         await session.abortTransaction();
-//         session.endSession();
 //         res.status(500).json({ message: 'Loan process failed' });
 //     }
 // };
+
+//With concurrency
+exports.loanBook = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const { userId, bookId } = req.body;
+
+        // Check if user has 5 active loans
+        const activeLoans = await Loan.countDocuments({ user: userId, returnDate: null }).session(session);
+        if (activeLoans >= config.maxBooksBorrowedAtaTime) {
+            await session.abortTransaction();
+            return res.status(400).json({ message: `Cannot borrow more than ${config.maxBooksBorrowedAtaTime} books` });
+        }
+
+        // Check if the book is available
+        const book = await Book.findById(bookId).session(session);
+        if (!book || !book.available) {
+            await session.abortTransaction();
+            return res.status(400).json({ message: 'Book not available' });
+        }
+
+        // Loan the book
+        const dueDate = calculateDueDate(book.rating);
+        const loan = new Loan({ user: userId, book: bookId, dueDate });
+        await loan.save({ session });
+
+        // Mark the book as unavailable
+        book.available = false;
+        await book.save({ session });
+
+        await session.commitTransaction();
+        session.endSession();
+        res.status(201).json(loan);
+    } catch (err) {
+        await session.abortTransaction();
+        session.endSession();
+        res.status(500).json({ message: 'Loan process failed' });
+    }
+};
 
 exports.returnBook = async (req, res) => {
     try {
